@@ -1,0 +1,15 @@
+{
+  "name": "ak-frida-agent",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "esbuild agent.ts --bundle --format=cjs --platform=neutral --outfile=dist/agent.js"
+  },
+  "dependencies": {
+    "frida-il2cpp-bridge": "^0.11.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "@types/frida-gum": "^18.0.0"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "_comment": "Board calibration — FILL IN with real pixel centers for your device resolution. 4 corners = screen centers of corner board tiles (row-major order: TL, TR, BL, BR). hand_slots = screen centers of each hand slot. ui = named buttons.",
+  "width": 2280,
+  "height": 1080,
+  "board_rows": 8,
+  "board_cols": 8,
+  "corners": [[0, 0], [0, 0], [0, 0], [0, 0]],
+  "hand_slots": [],
+  "ui": {
+    "ready": [0, 0],
+    "confirm": [0, 0],
+    "speed1": [0, 0],
+    "speed2": [0, 0],
+    "pause": [0, 0],
+    "shop_refresh": [0, 0],
+    "buy_slot_0": [0, 0],
+    "buy_slot_1": [0, 0],
+    "buy_slot_2": [0, 0],
+    "buy_slot_3": [0, 0],
+    "buy_slot_4": [0, 0],
+    "buff_0": [0, 0],
+    "buff_1": [0, 0],
+    "buff_2": [0, 0],
+    "withdraw_confirm": [0, 0],
+    "sell_zone": [0, 0]
+  }
+}

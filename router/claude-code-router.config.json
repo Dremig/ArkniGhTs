@@ -1,0 +1,29 @@
+{
+  "LOG": false,
+  "Providers": [
+    {
+      "name": "deepseek",
+      "api_base_url": "https://api.deepseek.com/chat/completions",
+      "api_key": "$DEEPSEEK_API_KEY",
+      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "transformer": {
+        "use": ["deepseek"],
+        "deepseek-chat": { "use": ["tooluse"] },
+        "deepseek-reasoner": { "use": ["tooluse"] }
+      }
+    },
+    {
+      "name": "openrouter",
+      "api_base_url": "https://openrouter.ai/api/v1/chat/completions",
+      "api_key": "$OPENROUTER_API_KEY",
+      "models": ["deepseek/deepseek-chat-v3.2", "anthropic/claude-sonnet-4.5"],
+      "transformer": { "use": ["openrouter"] }
+    }
+  ],
+  "Router": {
+    "default": "deepseek,deepseek-chat",
+    "think": "deepseek,deepseek-reasoner",
+    "background": "deepseek,deepseek-chat",
+    "longContext": "deepseek,deepseek-chat"
+  }
+}
