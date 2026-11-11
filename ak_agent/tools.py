@@ -115,6 +115,19 @@ def build_server(executor: OpExecutor):
         r = ex.sell_or_destroy(GridPos(a["row"], a["col"]))
         return _ok(r.__dict__) if r.ok else _err(r.detail)
 
+    @tool("get_team_state",
+          "Get team-phase context (room/strategy/DIY phases before battle starts): "
+          "team state enum, phase deadline timestamp, mode/stage/boss ids, all players "
+          "with their chosen strategies, and the strategy_decision brief (whose turn, "
+          "choices made so far, can_skip). Frida backend only.",
+          {})
+    async def get_team_state(_a):
+        d = ex.get_team()
+        if d is None:
+            return _ok({"in_team": False,
+                        "hint": "no team state — use get_game_state if already in battle"})
+        return _ok(d)
+
     @tool("shop_buy",
           "Buy a chess from the shop by slot_id (from get_game_state shop.goods). "
           "is_special: buy the special/dragged goods row. Frida backend only; on adb use tap_ui('buy_slot_N').",
@@ -207,17 +220,19 @@ def build_server(executor: OpExecutor):
 
     return create_sdk_mcp_server(
         "arknights",
-        tools=[get_game_state, get_hand, deploy_chess, move_chess,
-               withdraw_chess, equip_item, replace_equip, cast_magic,
-               sell_or_destroy, shop_buy, shop_refresh, shop_freeze,
-               shop_upgrade, confirm_ready, pick_slot, choose_strategy,
-               send_game_request, tap_ui, tap_raw, screenshot],
+        tools=[get_game_state, get_team_state, get_hand, deploy_chess,
+               move_chess, withdraw_chess, equip_item, replace_equip,
+               cast_magic, sell_or_destroy, shop_buy, shop_refresh,
+               shop_freeze, shop_upgrade, confirm_ready, pick_slot,
+               choose_strategy, send_game_request, tap_ui, tap_raw,
+               screenshot],
     )
 
 
 TOOL_NAMES = [f"mcp__arknights__{n}" for n in (
-    "get_game_state", "get_hand", "deploy_chess", "move_chess",
-    "withdraw_chess", "equip_item", "replace_equip", "cast_magic",
-    "sell_or_destroy", "shop_buy", "shop_refresh", "shop_freeze",
-    "shop_upgrade", "confirm_ready", "pick_slot", "choose_strategy",
-    "send_game_request", "tap_ui", "tap_raw", "screenshot")]
+    "get_game_state", "get_team_state", "get_hand", "deploy_chess",
+    "move_chess", "withdraw_chess", "equip_item", "replace_equip",
+    "cast_magic", "sell_or_destroy", "shop_buy", "shop_refresh",
+    "shop_freeze", "shop_upgrade", "confirm_ready", "pick_slot",
+    "choose_strategy", "send_game_request", "tap_ui", "tap_raw",
+    "screenshot")]

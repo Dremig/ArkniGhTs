@@ -3320,6 +3320,7 @@ var IMG = "Assembly-CSharp";
 var ready = false;
 var C = {};
 var getGameManager;
+var getService;
 function log(...a) {
   console.log("[ak]", ...a);
 }
@@ -3337,6 +3338,9 @@ function resolveClasses() {
   const base = img.class("Torappu.SingletonWithMonoHost`2").inflate(C.GameManager, C.BattleController);
   const getter2 = base.method("get_instanceOrNull");
   getGameManager = () => getter2.invoke();
+  const svcBase = img.class("Torappu.SocketNetwork.SvrCom.ServiceCoreBase`1").inflate(C.Service);
+  const statusGetter = svcBase.method("get_status");
+  getService = () => statusGetter.invoke();
 }
 function gm() {
   const m = getGameManager();
@@ -3374,8 +3378,12 @@ function readState() {
     chess: []
   };
   try {
-    out.game_state = call(status, "get_gameState");
+    out.game_state = call(status, "get_gameCurrentStateId");
   } catch (_) {
+    try {
+      out.game_state = call(status, "get_gameState");
+    } catch (_2) {
+    }
   }
   try {
     out.round = field(dc, "<currentRound>k__BackingField");
@@ -3474,6 +3482,91 @@ function readState() {
     }
   } catch (e) {
     out.shop_err = String(e);
+  }
+  return out;
+}
+function strList(list) {
+  const out = [];
+  if (!list || list.isNull?.()) return out;
+  const items = list.field("_items").value;
+  const size = list.field("_size").value;
+  for (let i = 0; i < size; i++) out.push(s(items.get(i)));
+  return out;
+}
+function readTeam() {
+  const svc = getService();
+  if (svc.isNull()) return { in_team: false };
+  const info = call(svc, "get_teamInfo");
+  if (info.isNull()) return { in_team: false };
+  const ts = info.field("teamStatus").value;
+  const out = { in_team: true };
+  try {
+    out.state = ts.field("state").value;
+  } catch (_) {
+  }
+  try {
+    out.state_end_ts = ts.field("teamStateEndTs").value?.toString();
+  } catch (_) {
+  }
+  try {
+    out.mode_id = s(ts.field("modeId").value);
+  } catch (_) {
+  }
+  try {
+    out.stage_id = s(ts.field("stageId").value);
+  } catch (_) {
+  }
+  try {
+    out.boss_id = s(ts.field("bossId").value);
+  } catch (_) {
+  }
+  try {
+    out.monster_keys = strList(ts.field("monsterKeys").value);
+  } catch (_) {
+  }
+  try {
+    const players = [];
+    const plist = ts.field("players").value;
+    if (plist && !plist.isNull()) {
+      const items = plist.field("_items").value;
+      const size = plist.field("_size").value;
+      for (let i = 0; i < size; i++) {
+        const p = items.get(i);
+        if (p.isNull()) continue;
+        players.push({
+          uid: s(field(p, "uid")),
+          name: s(field(p, "nickName")),
+          strategy: s(field(p, "strategy"))
+        });
+      }
+    }
+    out.players = players;
+  } catch (_) {
+  }
+  try {
+    const sd = ts.field("strategyDecisionBrief").value;
+    const choices = [];
+    const clist = sd.field("choices").value;
+    if (clist && !clist.isNull()) {
+      const items = clist.field("_items").value;
+      const size = clist.field("_size").value;
+      for (let i = 0; i < size; i++) {
+        const c = items.get(i);
+        if (c.isNull()) continue;
+        choices.push({
+          uid: s(field(c, "uid")),
+          strategy: s(field(c, "strategy")),
+          pass_cnt: field(c, "passCnt")
+        });
+      }
+    }
+    out.strategy_brief = {
+      round_fin_ts: sd.field("roundFinTs").value?.toString(),
+      can_skip: !!sd.field("canSkip").value,
+      curr_uid: s(sd.field("currUID").value),
+      choices
+    };
+  } catch (_) {
   }
   return out;
 }
@@ -3637,6 +3730,14 @@ rpc.exports = {
       }
     }
     return sendRequest(name, args);
+  },
+  getteam() {
+    if (!ready) return { in_team: false, err: "not ready" };
+    try {
+      return readTeam();
+    } catch (e) {
+      return { in_team: false, err: String(e) };
+    }
   },
   ping() {
     try {

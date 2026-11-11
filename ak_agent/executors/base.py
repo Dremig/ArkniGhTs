@@ -45,6 +45,10 @@ class OpExecutor(abc.ABC):
     def tap_raw(self, x: int, y: int) -> OpResult:
         """Raw pixel tap — escape hatch for uncalibrated UI."""
 
+    def get_team(self) -> Optional[dict]:
+        """Frida only: team-phase context (strategy picks, players, deadlines)."""
+        return None
+
     # ---- server protocol ops (AutoChessService.SendRequest) ----
     def send_request(self, name: str, args: dict) -> OpResult:
         """Frida only: send an AutoChessServiceRequest packet.

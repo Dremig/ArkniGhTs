@@ -113,6 +113,14 @@ class FridaExecutor:
         except Exception as e:  # noqa: BLE001
             return OpResult(False, "SELL", str(e), self.name)
 
+    def get_team(self) -> Optional[dict]:
+        try:
+            r = self._rpc("getteam")
+            d = json.loads(r) if isinstance(r, str) else r
+            return d if d and d.get("in_team") else None
+        except Exception:  # noqa: BLE001
+            return None
+
     def send_request(self, name: str, args: dict) -> OpResult:
         try:
             r = self._rpc("sendreq", name, json.dumps(args or {}))
