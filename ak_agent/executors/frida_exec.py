@@ -26,7 +26,7 @@ class FridaExecutor:
 
     def __init__(self, cfg: Config, calib: Optional[BoardCalib] = None):
         self._cfg = cfg
-        self._adb = AdbExecutor(cfg.adb_serial, calib)  # screenshot fallback
+        self._adb = AdbExecutor(cfg.adb_serial, calib, cfg.adb_path)  # screenshot fallback
         self._session: Optional[frida.core.Session] = None
         self._script: Optional[frida.core.Script] = None
         self._connect()

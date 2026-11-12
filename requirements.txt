@@ -1,3 +1,2 @@
-claude-agent-sdk>=0.1.6
-frida>=17.26.2
-# opencv-python-headless  # later: CV template matching for adb backend state
+claude-agent-sdk>=0.2.180
+numpy>=2.0

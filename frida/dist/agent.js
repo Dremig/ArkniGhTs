@@ -3315,6 +3315,7 @@ globalThis.Il2Cpp = Il2Cpp2;
 
 // agent.ts
 var NS_AC = "Torappu.Battle.AutoChess";
+var NS_DC = "Torappu.Battle.DataCenter";
 var NS_SRV = "Torappu.UI.AutoChess.Server";
 var IMG = "Assembly-CSharp";
 var ready = false;
@@ -3327,7 +3328,7 @@ function log(...a) {
 function resolveClasses() {
   const img = Il2Cpp.domain.assembly(IMG).image;
   C.GameManager = img.class(`${NS_AC}.AutoChessGameManager`);
-  C.DataCenter = img.class(`${NS_AC}.AutoChessDataCenter`);
+  C.DataCenter = img.class(`${NS_DC}.AutoChessDataCenter`);
   C.ChessMapInfo = img.class(`${NS_AC}.ChessMapInfo`);
   C.ChessInst = img.class(`${NS_AC}.ChessInst`);
   C.OpManager = img.class(`${NS_AC}.AutoChessPlayerOpManager`);
@@ -3391,6 +3392,14 @@ function readState() {
   }
   try {
     out.self_index = field(dc, "<selfPlayerIndex>k__BackingField");
+  } catch (_) {
+  }
+  try {
+    out.server_state = field(m, "<serverState>k__BackingField");
+  } catch (_) {
+  }
+  try {
+    out.force_end_ts = field(dc, "<forceEndTime>k__BackingField")?.toString();
   } catch (_) {
   }
   try {
@@ -3595,7 +3604,10 @@ var reqCache = {};
 function reqClass(name) {
   if (!reqCache[name]) {
     const img = Il2Cpp.domain.assembly(IMG).image;
-    reqCache[name] = img.class(`${NS_SRV}.${name}`);
+    const matches = img.classes.filter((klass) => klass.name === name);
+    if (matches.length !== 1)
+      throw new Error(`request class ${name}: expected 1 metadata match, got ${matches.length}`);
+    reqCache[name] = matches[0];
   }
   return reqCache[name];
 }
@@ -3604,6 +3616,7 @@ function sendRequest(name, args) {
   if (!spec) return { ok: false, err: `unknown request ${name}` };
   try {
     const req = reqClass(spec.cls).alloc();
+    req.method(".ctor").invoke();
     for (const [fname, ftype] of Object.entries(spec.fields ?? {})) {
       const v = args?.[fname];
       if (v === void 0) continue;
@@ -3625,6 +3638,7 @@ function makeUnitList(units) {
   const add = list.method("Add");
   for (const u of units) {
     const item = unitCls.alloc();
+    item.method(".ctor").invoke();
     item.field("instId").value = u.inst_id | 0;
     item.field("position").value = (u.row << 16) + u.col | 0;
     item.field("chessType").value = u.chess_type | 0;
@@ -3699,6 +3713,7 @@ rpc.exports = {
     if (name === "change_position") {
       try {
         const req = reqClass("AutoChessBattleSceneChangePositionUp").alloc();
+        req.method(".ctor").invoke();
         req.field("deployCount").value = args.deploy_count | 0;
         req.field("unitPositionInfo").value = makeUnitList(args.units ?? []);
         C.Service.method("SendRequest").overload(`${NS_SRV}.AutoChessServiceRequest`).invoke(req);
@@ -3710,6 +3725,7 @@ rpc.exports = {
     if (name === "use_magic") {
       try {
         const req = reqClass("AutoChessBattleSceneUseMagicUp").alloc();
+        req.method(".ctor").invoke();
         req.field("instId").value = args.inst_id | 0;
         req.field("deployCount").value = args.deploy_count | 0;
         req.field("unitPositionInfo").value = makeUnitList(args.units ?? []);
@@ -3722,6 +3738,7 @@ rpc.exports = {
     if (name === "diy_ready") {
       try {
         const req = reqClass("AutoChessTeamDiyChooseReadyUp").alloc();
+        req.method(".ctor").invoke();
         req.field("selectedIdentifiers").value = makeShortList(args.identifiers ?? []);
         C.Service.method("SendRequest").overload(`${NS_SRV}.AutoChessServiceRequest`).invoke(req);
         return { ok: true };

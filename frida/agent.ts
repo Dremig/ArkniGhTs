@@ -27,6 +27,7 @@
 import "frida-il2cpp-bridge";
 
 const NS_AC = "Torappu.Battle.AutoChess";
+const NS_DC = "Torappu.Battle.DataCenter";
 const NS_SRV = "Torappu.UI.AutoChess.Server";
 const IMG = "Assembly-CSharp";
 
@@ -40,7 +41,7 @@ function log(...a: any[]) { console.log("[ak]", ...a); }
 function resolveClasses() {
     const img = Il2Cpp.domain.assembly(IMG).image;
     C.GameManager = img.class(`${NS_AC}.AutoChessGameManager`);
-    C.DataCenter = img.class(`${NS_AC}.AutoChessDataCenter`);
+    C.DataCenter = img.class(`${NS_DC}.AutoChessDataCenter`);
     C.ChessMapInfo = img.class(`${NS_AC}.ChessMapInfo`);
     C.ChessInst = img.class(`${NS_AC}.ChessInst`);
     C.OpManager = img.class(`${NS_AC}.AutoChessPlayerOpManager`);
@@ -109,6 +110,14 @@ function readState(): any {
     try { out.round = field(dc, "<currentRound>k__BackingField"); } catch (_) { }
     try {
         out.self_index = field(dc, "<selfPlayerIndex>k__BackingField");
+    } catch (_) { }
+    try {
+        // AutoChessGameManager.serverState — server-authoritative phase
+        out.server_state = field(m, "<serverState>k__BackingField");
+    } catch (_) { }
+    try {
+        // forceEndTime — prep-phase hard deadline (server clock)
+        out.force_end_ts = field(dc, "<forceEndTime>k__BackingField")?.toString();
     } catch (_) { }
 
     // player state
@@ -288,7 +297,13 @@ const reqCache: Record<string, Il2Cpp.Class> = {};
 function reqClass(name: string): Il2Cpp.Class {
     if (!reqCache[name]) {
         const img = Il2Cpp.domain.assembly(IMG).image;
-        reqCache[name] = img.class(`${NS_SRV}.${name}`);
+        // Protocol request types are nested under AutoChessBattleProtocol /
+        // AutoChessTeamProtocol. Their metadata namespace is not a reliable
+        // lookup key, so resolve by the unique IL2CPP class name.
+        const matches = img.classes.filter((klass: Il2Cpp.Class) => klass.name === name);
+        if (matches.length !== 1)
+            throw new Error(`request class ${name}: expected 1 metadata match, got ${matches.length}`);
+        reqCache[name] = matches[0];
     }
     return reqCache[name];
 }
@@ -298,6 +313,7 @@ function sendRequest(name: string, args: any): any {
     if (!spec) return { ok: false, err: `unknown request ${name}` };
     try {
         const req = reqClass(spec.cls).alloc() as Il2Cpp.Object;
+        req.method(".ctor").invoke();
         for (const [fname, ftype] of Object.entries(spec.fields ?? {})) {
             const v = args?.[fname];
             if (v === undefined) continue;
@@ -325,6 +341,7 @@ function makeUnitList(units: any[]): Il2Cpp.Object {
     const add = list.method("Add");
     for (const u of units) {
         const item = unitCls.alloc() as Il2Cpp.Object;
+        item.method(".ctor").invoke();
         item.field("instId").value = u.inst_id | 0;
         item.field("position").value = ((u.row << 16) + u.col) | 0;
         item.field("chessType").value = u.chess_type | 0;
@@ -405,6 +422,7 @@ rpc.exports = {
         if (name === "change_position") {
             try {
                 const req = reqClass("AutoChessBattleSceneChangePositionUp").alloc() as Il2Cpp.Object;
+                req.method(".ctor").invoke();
                 req.field("deployCount").value = args.deploy_count | 0;
                 req.field("unitPositionInfo").value = makeUnitList(args.units ?? []);
                 C.Service.method("SendRequest")
@@ -415,6 +433,7 @@ rpc.exports = {
         if (name === "use_magic") {
             try {
                 const req = reqClass("AutoChessBattleSceneUseMagicUp").alloc() as Il2Cpp.Object;
+                req.method(".ctor").invoke();
                 req.field("instId").value = args.inst_id | 0;
                 req.field("deployCount").value = args.deploy_count | 0;
                 req.field("unitPositionInfo").value = makeUnitList(args.units ?? []);
@@ -426,6 +445,7 @@ rpc.exports = {
         if (name === "diy_ready") {
             try {
                 const req = reqClass("AutoChessTeamDiyChooseReadyUp").alloc() as Il2Cpp.Object;
+                req.method(".ctor").invoke();
                 req.field("selectedIdentifiers").value = makeShortList(args.identifiers ?? []);
                 C.Service.method("SendRequest")
                     .overload(`${NS_SRV}.AutoChessServiceRequest`).invoke(req);

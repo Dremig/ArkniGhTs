@@ -1,10 +1,10 @@
 """OpExecutor — backend-agnostic executor interface.
 
-Two backends:
-  FridaExecutor — invokes AutoChessPlayerOpManager directly (deterministic,
-                  needs rooted device/emulator + frida-server).
-  AdbExecutor   — input swipe emulation via calibrated grid (works on any
-                  device incl. the non-rooted phone).
+Backends:
+  MreadExecutor — live structured memory state plus semantic Android input;
+                  every supported action is verified by a new memory snapshot.
+  FridaExecutor — experimental direct invocation; detected in this client.
+  AdbExecutor   — calibrated input only, without structured state.
 """
 from __future__ import annotations
 
@@ -46,12 +46,12 @@ class OpExecutor(abc.ABC):
         """Raw pixel tap — escape hatch for uncalibrated UI."""
 
     def get_team(self) -> Optional[dict]:
-        """Frida only: team-phase context (strategy picks, players, deadlines)."""
+        """Team-phase context (strategy picks, players, deadlines), if supported."""
         return None
 
     # ---- server protocol ops (AutoChessService.SendRequest) ----
     def send_request(self, name: str, args: dict) -> OpResult:
-        """Frida only: send an AutoChessServiceRequest packet.
+        """Execute a semantic preparation/team action through the active backend.
         Names: shop_buy/shop_refresh/shop_froze/shop_upgrade, prep_ready,
         sp_pick/self_pick, destroy_chess, use_equip, change_position,
         use_magic, choose_strategy, team_ready, start_match,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
@@ -16,7 +17,6 @@ from .executors import OpExecutor
 from .model import Direction, GridPos, OpType
 
 _SHOT_DIR = Path("/tmp/ak_shots")
-_SHOT_DIR.mkdir(exist_ok=True)
 
 
 def _ok(payload) -> dict:
@@ -27,19 +27,24 @@ def _err(msg: str) -> dict:
     return {"content": [{"type": "text", "text": f"ERROR: {msg}"}], "is_error": True}
 
 
-def build_server(executor: OpExecutor):
+def _schema(properties: dict, required: list[str]) -> dict:
+    return {"type": "object", "properties": properties,
+            "required": required, "additionalProperties": False}
+
+
+def build_tools(executor: OpExecutor):
     ex = executor
 
     @tool("get_game_state",
           "Get the full structured SSS battle state: phase, round, your hp/shop_coin/shop_level, "
           "all chess on board and in hand (chess_id, row/col, direction, type). "
-          "Returns null-ish when not inside a battle scene — then use screenshot instead.",
+          "An unavailable read leaves the current phase unknown. Check source before treating a snapshot as live.",
           {})
     async def get_game_state(_a):
         st = ex.get_state()
         if st is None:
-            return _ok({"in_battle": False,
-                        "hint": "no memory state — take a screenshot or you are outside the battle scene"})
+            return _ok({"available": False, "phase": None,
+                        "reason": "backend did not provide a state snapshot"})
         return _ok(st.to_json())
 
     @tool("get_hand",
@@ -50,14 +55,18 @@ def build_server(executor: OpExecutor):
         st = ex.get_state()
         if st is None:
             return _err("state unavailable (adb backend or not in battle)")
-        return _ok([c.__dict__ | {"pos": vars(c.pos)} for c in st.hand])
+        payload = st.to_json()
+        return _ok(payload.get("hand", []))
 
     @tool("deploy_chess",
           "Deploy a chess piece from hand onto a board tile. "
           "hand_row/hand_col: the piece's position in hand (from get_hand). "
           "to_row/to_col: target board tile. direction: facing UP/RIGHT/DOWN/LEFT (default RIGHT).",
-          {"hand_row": int, "hand_col": int, "to_row": int, "to_col": int,
-           "direction": str})
+          _schema({**{k: {"type": "integer"} for k in
+                      ("hand_row", "hand_col", "to_row", "to_col")},
+                   "direction": {"type": "string", "enum": ["UP", "RIGHT", "DOWN", "LEFT"],
+                                 "default": "RIGHT"}},
+                  ["hand_row", "hand_col", "to_row", "to_col"]))
     async def deploy_chess(a):
         d = Direction[a.get("direction", "RIGHT").upper()]
         r = ex.do_op(OpType.MOVE_ONLY,
@@ -67,8 +76,11 @@ def build_server(executor: OpExecutor):
 
     @tool("move_chess",
           "Move an already-deployed chess to another tile (and optionally change facing).",
-          {"from_row": int, "from_col": int, "to_row": int, "to_col": int,
-           "direction": str})
+          _schema({**{k: {"type": "integer"} for k in
+                      ("from_row", "from_col", "to_row", "to_col")},
+                   "direction": {"type": "string", "enum": ["UP", "RIGHT", "DOWN", "LEFT", "INVALID"],
+                                 "default": "INVALID"}},
+                  ["from_row", "from_col", "to_row", "to_col"]))
     async def move_chess(a):
         d = Direction[a.get("direction", "INVALID").upper()]
         r = ex.do_op(OpType.MOVE_ONLY, GridPos(a["from_row"], a["from_col"]),
@@ -119,40 +131,41 @@ def build_server(executor: OpExecutor):
           "Get team-phase context (room/strategy/DIY phases before battle starts): "
           "team state enum, phase deadline timestamp, mode/stage/boss ids, all players "
           "with their chosen strategies, and the strategy_decision brief (whose turn, "
-          "choices made so far, can_skip). Frida backend only.",
+          "choices made so far, can_skip). Requires a live backend that provides team state.",
           {})
     async def get_team_state(_a):
         d = ex.get_team()
         if d is None:
-            return _ok({"in_team": False,
-                        "hint": "no team state — use get_game_state if already in battle"})
+            return _ok({"available": False, "team_state": None,
+                        "reason": "backend did not provide a team snapshot"})
         return _ok(d)
 
     @tool("shop_buy",
           "Buy a chess from the shop by slot_id (from get_game_state shop.goods). "
-          "is_special: buy the special/dragged goods row. Frida backend only; on adb use tap_ui('buy_slot_N').",
-          {"slot_id": int, "is_special": bool})
+          "is_special: buy the special goods row. The backend verifies the resulting live state.",
+          _schema({"slot_id": {"type": "integer"},
+                   "is_special": {"type": "boolean", "default": False}}, ["slot_id"]))
     async def shop_buy(a):
         r = ex.send_request("shop_buy", {"slotId": a["slot_id"],
                                        "isSpecial": bool(a.get("is_special", False))})
         return _ok(r.__dict__) if r.ok else _err(r.detail)
 
     @tool("shop_refresh",
-          "Reroll the shop goods (costs refresh_price). Frida backend only.",
+          "Reroll the shop goods (costs refresh_price); verifies the new live shop state.",
           {})
     async def shop_refresh(_a):
         r = ex.send_request("shop_refresh", {})
         return _ok(r.__dict__) if r.ok else _err(r.detail)
 
     @tool("shop_freeze",
-          "Freeze/unfreeze the shop so goods persist next round. Frida backend only.",
+          "Freeze/unfreeze the shop so goods persist next round; verifies every goods flag.",
           {"frozen": bool})
     async def shop_freeze(a):
         r = ex.send_request("shop_froze", {"isFrozen": bool(a["frozen"])})
         return _ok(r.__dict__) if r.ok else _err(r.detail)
 
     @tool("shop_upgrade",
-          "Upgrade shop level (costs upgrade_price). Frida backend only.",
+          "Upgrade shop level (costs upgrade_price); verifies level and economy state.",
           {})
     async def shop_upgrade(_a):
         r = ex.send_request("shop_upgrade", {})
@@ -160,15 +173,17 @@ def build_server(executor: OpExecutor):
 
     @tool("confirm_ready",
           "Signal READY (or cancel) for the preparation phase countdown — the 'ready' button. "
-          "Frida backend only; on adb use tap_ui('ready').",
-          {"ready": bool})
+          "The backend handles any confirmation dialog and verifies ready/phase/round state.",
+          _schema({"ready": {"type": "boolean", "default": True}}, []))
     async def confirm_ready(a):
         r = ex.send_request("prep_ready", {"readyType": 1 if a.get("ready", True) else 0})
         return _ok(r.__dict__) if r.ok else _err(r.detail)
 
     @tool("pick_slot",
           "Pick slot_id in a choose-one-of-N prompt (special preparation / self-choice rewards).",
-          {"slot_id": int, "kind": str})
+          _schema({"slot_id": {"type": "integer"},
+                   "kind": {"type": "string", "enum": ["self", "special"], "default": "self"}},
+                  ["slot_id"]))
     async def pick_slot(a):
         name = "self_pick" if a.get("kind", "self").lower().startswith("self") else "sp_pick"
         r = ex.send_request(name, {"slotId": a["slot_id"]})
@@ -176,8 +191,9 @@ def build_server(executor: OpExecutor):
 
     @tool("choose_strategy",
           "Choose a strategy in the timed '选择策略' phase. strategy = strategy id string; "
-          "set skip=true to give up choosing. Frida backend only.",
-          {"strategy": str, "skip": bool})
+          "set skip=true to give up choosing. Availability depends on calibrated strategy mappings.",
+          _schema({"strategy": {"type": "string", "default": ""},
+                   "skip": {"type": "boolean", "default": False}}, []))
     async def choose_strategy(a):
         r = ex.send_request("choose_strategy", {"skip": bool(a.get("skip", False)),
                                                 "strategy": a.get("strategy", "")})
@@ -187,7 +203,8 @@ def build_server(executor: OpExecutor):
           "Escape hatch — send any other AutoChessServiceRequest by name. "
           "team_ready{ready}, start_match{}, enemy_assign_ready{ready}, "
           "diy_ready{identifiers:[int]}, diy_revoke{}, change_position{deploy_count, units:[{inst_id,row,col,chess_type,direction}]}, "
-          "use_magic{inst_id, deploy_count, units:[...]}, observe{}. Frida backend only.",
+          "use_magic{inst_id, deploy_count, units:[...]}, observe{}. "
+          "Experimental direct-RPC backends only; not exposed by the default live runtime.",
           {"name": str, "args": dict})
     async def send_game_request(a):
         r = ex.send_request(a["name"], a.get("args") or {})
@@ -214,25 +231,29 @@ def build_server(executor: OpExecutor):
           "read it to see the current UI when structured state is unavailable.",
           {})
     async def screenshot(_a):
-        p = str(_SHOT_DIR / f"shot_{int(time.time())}.png")
-        ex.screenshot(p)
-        return _ok({"path": p})
+        _SHOT_DIR.mkdir(parents=True, exist_ok=True)
+        p = str(_SHOT_DIR / f"shot_{uuid.uuid4().hex}.png")
+        actual = ex.screenshot(p)
+        if not Path(actual).is_file() or Path(actual).stat().st_size == 0:
+            return _err("backend did not produce a screenshot")
+        return _ok({"path": actual})
 
-    return create_sdk_mcp_server(
-        "arknights",
-        tools=[get_game_state, get_team_state, get_hand, deploy_chess,
+    definitions = [get_game_state, get_team_state, get_hand, deploy_chess,
                move_chess, withdraw_chess, equip_item, replace_equip,
                cast_magic, sell_or_destroy, shop_buy, shop_refresh,
                shop_freeze, shop_upgrade, confirm_ready, pick_slot,
                choose_strategy, send_game_request, tap_ui, tap_raw,
-               screenshot],
-    )
+               screenshot]
+    if getattr(ex, "structured_only", False):
+        excluded = {"send_game_request", "tap_ui", "tap_raw", "screenshot"}
+        definitions = [definition for definition in definitions
+                       if definition.name not in excluded]
+    return definitions
 
 
-TOOL_NAMES = [f"mcp__arknights__{n}" for n in (
-    "get_game_state", "get_team_state", "get_hand", "deploy_chess",
-    "move_chess", "withdraw_chess", "equip_item", "replace_equip",
-    "cast_magic", "sell_or_destroy", "shop_buy", "shop_refresh",
-    "shop_freeze", "shop_upgrade", "confirm_ready", "pick_slot",
-    "choose_strategy", "send_game_request", "tap_ui", "tap_raw",
-    "screenshot")]
+def build_server(executor: OpExecutor):
+    return create_sdk_mcp_server("arknights", tools=build_tools(executor))
+
+
+def tool_names(executor: OpExecutor) -> list[str]:
+    return [f"mcp__arknights__{definition.name}" for definition in build_tools(executor)]

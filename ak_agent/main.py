@@ -4,7 +4,7 @@ Model brain is swappable through ANTHROPIC_BASE_URL → claude-code-router
 (see agent/router/) which forwards to DeepSeek's OpenAI-compatible API.
 Run `ccr code`-style router first, then:
 
-    AK_BACKEND=auto ANTHROPIC_BASE_URL=http://127.0.0.1:3456 \
+    AK_BACKEND=mread ANTHROPIC_BASE_URL=http://127.0.0.1:3456 \
     ANTHROPIC_AUTH_TOKEN=ak-router AK_MODEL=deepseek-chat \
     python -m ak_agent.main
 """
@@ -19,12 +19,12 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions,
 from .config import load
 from .executors import build
 from .prompts import SYSTEM_PROMPT
-from .tools import TOOL_NAMES, build_server
+from .tools import build_server, tool_names
 
 KICKOFF = (
     "We are entering a 卫戍协议 (AutoChess) run. First call get_game_state to see "
-    "where we are; if not in battle take a screenshot and navigate/confirm until "
-    "the run starts. Then play to win: manage shop economy in PREPARE, deploy and "
+    "where we are. If live structured state is unavailable, report the connection error "
+    "instead of guessing. Then play to win: manage shop economy in PREPARE, deploy and "
     "hold lanes in BATTLE, kill the boss in BOSS_BATTLE. Keep going until SETTLE "
     "or END, then summarize the run."
 )
@@ -42,9 +42,11 @@ async def amain() -> None:
         env["ANTHROPIC_AUTH_TOKEN"] = cfg.anthropic_auth_token
 
     options = ClaudeAgentOptions(
+        tools=[],
         system_prompt=SYSTEM_PROMPT,
         mcp_servers={"arknights": build_server(executor)},
-        allowed_tools=TOOL_NAMES + ["Read", "Write", "Bash"],
+        strict_mcp_config=True,
+        allowed_tools=tool_names(executor),
         model=cfg.model,
         env=env,
         max_turns=400,

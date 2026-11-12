@@ -127,3 +127,7 @@ class OpResult:
     op: str
     detail: str = ""
     backend: str = ""
+    dispatched: bool = False
+    verified: bool = False
+    before_snapshot_id: str = ""
+    after_snapshot_id: str = ""

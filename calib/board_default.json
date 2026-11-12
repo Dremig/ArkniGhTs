@@ -1,27 +1,49 @@
 {
-  "_comment": "Board calibration — FILL IN with real pixel centers for your device resolution. 4 corners = screen centers of corner board tiles (row-major order: TL, TR, BL, BR). hand_slots = screen centers of each hand slot. ui = named buttons.",
+  "_comment": "Live emulator-5556 UI controls at 2280x1080. Board and hand geometry remain intentionally unset; board operations fail closed until calibrated from real positions.",
   "width": 2280,
   "height": 1080,
-  "board_rows": 8,
-  "board_cols": 8,
-  "corners": [[0, 0], [0, 0], [0, 0], [0, 0]],
+  "board_rows": 5,
+  "board_cols": 9,
+  "board_row_min": 2,
+  "board_col_min": 2,
+  "corners": [[775, 640], [1775, 640], [775, 280], [1775, 280]],
+  "board_pick_offset": [0, 0],
   "hand_slots": [],
+  "hand_rows": {
+    "0": {"origin": [540, 870], "step": [130, 0]},
+    "1": {"origin": [520, 760], "step": [130, 0]}
+  },
   "ui": {
-    "ready": [0, 0],
-    "confirm": [0, 0],
+    "ready": [2135, 170],
+    "confirm": [1700, 730],
     "speed1": [0, 0],
     "speed2": [0, 0],
     "pause": [0, 0],
-    "shop_refresh": [0, 0],
-    "buy_slot_0": [0, 0],
-    "buy_slot_1": [0, 0],
-    "buy_slot_2": [0, 0],
-    "buy_slot_3": [0, 0],
-    "buy_slot_4": [0, 0],
+    "shop_refresh": [2135, 690],
+    "shop_freeze": [1930, 690],
+    "shop_upgrade": [940, 950],
+    "shop_upgrade_confirm": [940, 1020],
+    "shop_close": [2135, 950],
+    "shop_open": [2135, 950],
+    "buy_slot_0": [1890, 900],
+    "buy_slot_1": [1650, 900],
+    "buy_slot_2": [1405, 900],
+    "buy_slot_3": [1160, 900],
+    "buy_slot_4": [915, 900],
+    "buy_confirm_slot_0": [1890, 1030],
+    "buy_confirm_slot_1": [1650, 1030],
+    "buy_confirm_slot_2": [1405, 1030],
+    "buy_confirm_slot_3": [1160, 1030],
+    "buy_confirm_slot_4": [915, 1030],
     "buff_0": [0, 0],
     "buff_1": [0, 0],
     "buff_2": [0, 0],
+    "strategy_band_weakness": [660, 900],
+    "strategy_ready": [2040, 985],
     "withdraw_confirm": [0, 0],
-    "sell_zone": [0, 0]
+    "sell_zone": [2110, 850]
+    ,"sell_board_button": [1285, 595]
+    ,"sell_hand_button": [1135, 400]
+    ,"withdraw_board_button": [960, 595]
   }
 }
